@@ -6,6 +6,7 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Diagnostics;
+using System.Drawing;
 
 
 namespace SystemTrayApp
@@ -15,6 +16,7 @@ namespace SystemTrayApp
 
         TcpListener listener;
         TextBox resultsTextBox;
+        private int portNumber;
 
         public AppWindow()
         {
@@ -22,7 +24,18 @@ namespace SystemTrayApp
             this.CenterToScreen();
             this.Load += (sender, e) =>
             {
-                MessageBox.Show("Now Listening for Screen Pop Requests.", "Listener Started", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // Get port number from the user
+                string input = Microsoft.VisualBasic.Interaction.InputBox("Enter Port Number:", "Configuration", "4545", -1, -1);
+                if (!int.TryParse(input, out portNumber) || portNumber <= 0 || portNumber >= 65536)
+                {
+                    MessageBox.Show("Invalid Port Number. Application will exit.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    Application.Exit();
+                    return;
+                }
+
+                MessageBox.Show("Now Listening for Screen Pop Requests on port " + portNumber, "Listener Started", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // Starting the Listener code
+                Task.Run(() => StartServer());
             };
 
             // Initializing Results textBox
@@ -39,9 +52,6 @@ namespace SystemTrayApp
             this.SystemTrayIcon.Icon = Properties.Resources.Default;
             this.SystemTrayIcon.Text = "Screen Pop Service";
             this.SystemTrayIcon.Visible = true;
-
-            // Starting the Listener code
-            Task.Run(() => StartServer());
 
             // Initializing Context Menu for Right Click
             ContextMenu menu = new ContextMenu();
@@ -88,7 +98,7 @@ namespace SystemTrayApp
         {
             try
             {
-                listener = new TcpListener(IPAddress.Loopback, 4545);
+                listener = new TcpListener(IPAddress.Loopback, portNumber);
                 listener.Start();
 
                 while (true)
@@ -124,7 +134,12 @@ namespace SystemTrayApp
                 var results = ExtractResults(queryString);
                 var ani = ExtractAni(queryString);
 
-                if (results == null || ani == null) return;
+                if (results == "search_exception")
+                {
+                    string description = GetParameterFromQueryString(queryString, "description");
+                    ShowSearchExceptionMessage(description);
+                    return;
+                }
 
                 ProcessResults(results, ani, queryString);
             }
@@ -141,18 +156,13 @@ namespace SystemTrayApp
         private string ExtractResults(string queryString) =>
             GetParameterFromQueryString(queryString, "results");
 
-        private string ExtractAni(string queryString)
-        {
-            int startIdx = queryString.IndexOf("&") + 1;
-            int endIdx = queryString.IndexOf("&", startIdx);
-            endIdx = endIdx == -1 ? queryString.Length : endIdx;
+        private string ExtractAni(string queryString) =>
+            GetParameterFromQueryString(queryString, "ani")?.Replace("%2b", "+");
 
-            return WebUtility.UrlDecode(queryString.Substring(startIdx, endIdx - startIdx))
-                .Replace("%2b", "+");
-        }
 
         private void ProcessResults(string results, string ani, string queryString)
         {
+
             int numOfResults = int.Parse(results);
             this.Invoke((MethodInvoker)delegate
             {
@@ -219,9 +229,11 @@ namespace SystemTrayApp
 
             var resultsForm = new Form
             {
-                Text = "Multiple Matches Found",
-                Width = 500,
-                Height = 300,
+                Text = "Multiple Matches",
+                Width = 300,
+                Height = 250,
+                StartPosition = FormStartPosition.CenterScreen,
+                Icon = SystemIcons.Information
             };
 
             var resultsTextBox = new TextBox
@@ -237,6 +249,13 @@ namespace SystemTrayApp
             resultsForm.Show(this);
         }
 
+        private void ShowSearchExceptionMessage(string description)
+        {
+            MessageBox.Show($"Error: {description}",
+                            "Search Exception",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error); // Displaying error icon
+        }
 
         // Method to extract parameter value from query string
         private string GetParameterFromQueryString(string queryString, string parameterName)
