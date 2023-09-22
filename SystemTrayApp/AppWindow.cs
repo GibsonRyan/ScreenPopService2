@@ -99,7 +99,7 @@ namespace SystemTrayApp
             }
             catch (Exception ex)
             {
-                WriteToFile($"An exception occurred: {ex.Message}");
+                LogMessage($"An exception occurred: {ex.Message}");
             }
         }
 
@@ -130,7 +130,7 @@ namespace SystemTrayApp
             }
             catch (Exception ex)
             {
-                LogError($"Error occurred while handling client: {ex.Message}");
+                LogMessage($"Error occurred while handling client: {ex.Message}");
             }
             finally
             {
@@ -253,58 +253,29 @@ namespace SystemTrayApp
             return null;
         }
 
-        public void WriteToFile(string message)
+        private void LogMessage(string message)
         {
             try
             {
-                string path = AppDomain.CurrentDomain.BaseDirectory + "\\Logs";
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
+
+                // Create directory if it does not exist
                 if (!Directory.Exists(path))
-                {
                     Directory.CreateDirectory(path);
-                }
 
-                string dateStr = DateTime.Now.Date.ToString("yyyy-MM-dd");
-                string filePath = AppDomain.CurrentDomain.BaseDirectory + "\\Logs\\ServiceLog_" + dateStr;
+                string dateStr = DateTime.Now.ToString("yyyy-MM-dd");
+                string fileName = $"ErrorLog_{dateStr}.log";
+                string filePath = Path.Combine(path, fileName);
 
-                if (!File.Exists(filePath))
+                // Write the log message to the file
+                using (StreamWriter sw = new StreamWriter(filePath, true)) // Append mode
                 {
-                    using (StreamWriter sw = File.CreateText(filePath))
-                    {
-                        sw.WriteLine(message);
-                    }
-                }
-                else
-                {
-                    using (StreamWriter sw = File.AppendText(filePath))
-                    {
-                        sw.WriteLine(message);
-                    }
+                    sw.WriteLine(message);
                 }
             }
             catch (Exception ex)
             {
                 EventLog.WriteEntry("MyServiceName", ex.Message, EventLogEntryType.Error);
-            }
-        }
-
-        private void LogError(string message)
-        {
-            try
-            {
-                var dateStr = DateTime.Now.ToString("yyyy-MM-dd");
-                var logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs", $"ServiceLog_{dateStr}.log");
-
-                Directory.CreateDirectory(Path.GetDirectoryName(logFilePath));
-
-                using (var writer = new StreamWriter(logFilePath, true))
-                {
-                    writer.WriteLine(message);
-
-                }
-            }
-            catch (Exception ex)
-            {
-                EventLog.WriteEntry("ServiceName", ex.Message, EventLogEntryType.Error);
             }
         }
 
