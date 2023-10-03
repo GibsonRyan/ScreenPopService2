@@ -7,7 +7,10 @@ using System.Net;
 using System.Net.Sockets;
 using System.Diagnostics;
 using System.Drawing;
-
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Configuration;
+using System.Collections.Generic;
 
 namespace SystemTrayApp
 {
@@ -17,6 +20,13 @@ namespace SystemTrayApp
         TcpListener listener;
         TextBox resultsTextBox;
         private int portNumber;
+        private IntPtr CubshWnd;
+        private List<string> processNames;
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool SetForegroundWindow(IntPtr hWnd);
+
 
         public AppWindow()
         {
@@ -32,6 +42,11 @@ namespace SystemTrayApp
                     Application.Exit();
                     return;
                 }
+
+                // Get process names from the user
+                string processInput = Microsoft.VisualBasic.Interaction.InputBox("Enter Process Names (comma separated):", "Configuration", "ALLIANCEONE,putty,cuemulate", -1, -1);
+                processNames = processInput.Split(',').Select(p => p.Trim()).ToList();
+
 
                 MessageBox.Show("Now Listening for Screen Pop Requests on port " + portNumber, "Listener Started", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 // Starting the Listener code
@@ -204,7 +219,7 @@ namespace SystemTrayApp
                             MessageBoxIcon.Information);
 
             Clipboard.SetText(accountNumber);
-            SendKeys.Send("^v");
+            PerformPasteAction();
         }
 
         private void ShowMultipleMatches(string ani, int numOfResults, string queryString)
@@ -254,7 +269,7 @@ namespace SystemTrayApp
             MessageBox.Show($"Error: {description}",
                             "Search Exception",
                             MessageBoxButtons.OK,
-                            MessageBoxIcon.Error); // Displaying error icon
+                            MessageBoxIcon.Error);
         }
 
         // Method to extract parameter value from query string
@@ -271,6 +286,49 @@ namespace SystemTrayApp
             }
             return null;
         }
+
+        // Get the process window for to be used for the paste
+        void GetHWndFromRunningProcesses()
+        {
+            foreach (string targetName in processNames)
+            {
+                foreach (Process process in Process.GetProcesses())
+                {
+                    if (process.ProcessName.Equals(targetName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        CubshWnd = process.MainWindowHandle;
+                        return;
+                    }
+                }
+            }
+
+
+            CubshWnd = IntPtr.Zero;
+        }
+
+        void PasteAcctIdAndEnter()
+        {
+            SetForegroundWindow(CubshWnd);
+            SendKeys.SendWait("^{v}");
+            SendKeys.SendWait("{ENTER}");
+        }
+
+        // To be called in the Single match in order to perform the paste and enter
+        void PerformPasteAction()
+        {
+            GetHWndFromRunningProcesses();
+            if (CubshWnd != IntPtr.Zero)
+            {
+                PasteAcctIdAndEnter();
+            }
+            else
+            {
+                MessageBox.Show("Cannot find a window to paste account ID.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+
+
 
         private void LogMessage(string message)
         {
